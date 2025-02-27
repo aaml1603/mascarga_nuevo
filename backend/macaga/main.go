@@ -10,12 +10,26 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const uri = "postgresql://postgres:XRBXItJPIJZIbexqTSiXPdUFUZifVfHG@shinkansen.proxy.rlwy.net:19248/railway"
 
+// CORS configuration
+const CORS_ORIGIN = "http://localhost:3003"
+
+// Secret key for JWT signing
+const HMACSecretKey = ";sliudfglkjlkjdsfhglkjsdflgjvnsldfhjgblshfbvvljfhbh"
+
+// Token types
+const (
+	ACCESS  = 0
+	REFRESH = 1
+)
+
+// Database models
 type Registration struct {
 	Nombre     string `json:"nombre"`
 	Apellido   string `json:"apellido"`
@@ -26,6 +40,16 @@ type Registration struct {
 	Ciudad     string `json:"ciudad"`
 	Estado     string `json:"estado"`
 	Telefono   string `json:"telefono"`
+}
+
+type Entrega struct {
+	ID            int       `json:"id"`
+	UserID        uuid.UUID `json:"user_id"`
+	Numero        string    `json:"numero"`
+	Origen        string    `json:"origen"`
+	Destino       string    `json:"destino"`
+	FechaEstimada time.Time `json:"fecha_estimada"`
+	Estado        string    `json:"estado"`
 }
 
 type Server struct {
@@ -43,18 +67,27 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-const (
-	ACCESS = iota
-	REFRESH
-)
+// CORS Middleware
+func CorsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", CORS_ORIGIN)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
-//id:serial, userid:forenkey, number, origin, destination, expevted:date, status:choose form intransit, delivered, proccesing
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 
-const HMACSecretKey = ";sliudfglkjlkjdsfhglkjsdflgjvnsldfhjgblshfbvvljfhbh"
+		next.ServeHTTP(w, r)
+	})
+}
 
+// Generate JWT token
 func GenerateHMac(userID uuid.UUID, tokenType int8, timeframe time.Time) (jwtToken string, err error) {
-	if tokenType != 0 && tokenType != 1 {
-		return "", fmt.Errorf("wrong tokent type")
+	if tokenType != ACCESS && tokenType != REFRESH {
+		return "", fmt.Errorf("invalid token type")
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
@@ -66,128 +99,81 @@ func GenerateHMac(userID uuid.UUID, tokenType int8, timeframe time.Time) (jwtTok
 			ExpiresAt: jwt.NewNumericDate(timeframe),
 		},
 	})
-	
 
-
-	tkstring, err := token.SignedString(HMACSecretKey)
-	if err != nil {
-		return "", err
-	}
-
-	return tkstring, nil
+	return token.SignedString([]byte(HMACSecretKey))
 }
 
-func AuthMiddleware(next http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
-		if token == "" {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		userID, tokenType, err := ValidateHmac(token)
-		if err != nil {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		if tokenType != ACCESS {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		r.Header.Add("X-GAUTH-USERID", userID.String())
-		next.ServeHTTP(w, r)
-	})
-}
-
-// use ts for thje middleware nigga
-func ValidateHmac(tokenString string) (UUID uuid.UUID, tokenType int8, err error) {
+// Validate JWT token
+func ValidateHmac(tokenString string) (uuid.UUID, int8, error) {
 	if tokenString == "" {
-		return uuid.Nil, -1, fmt.Errorf("token is empty")
+		return uuid.Nil, -1, fmt.Errorf("empty token")
 	}
 
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return HMACSecretKey, nil
+		return []byte(HMACSecretKey), nil
 	})
+
+	if err != nil {
+		return uuid.Nil, -1, err
+	}
 
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
 		return uuid.Nil, -1, fmt.Errorf("invalid token")
 	}
 
-	if claims.UserID == uuid.Nil {
-		return uuid.Nil, -1, fmt.Errorf("invalid uuid")
-	}
-
-	if claims.Issuer != "mascarga" {
-		return uuid.Nil, -1, fmt.Errorf("invalid issuer")
+	if claims.UserID == uuid.Nil || claims.Issuer != "mascarga" {
+		return uuid.Nil, -1, fmt.Errorf("invalid token data")
 	}
 
 	return claims.UserID, claims.TokenType, nil
 }
 
-
+// Password hashing
 func HashPassword(password string) (string, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	
-	return string(hashedPassword), nil
+	return string(hashedPassword), err
 }
 
-func ComparePassword(hashedPassword, password string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
-	return err == nil
+// Compare hashed password
+func ComparePassword(plainPassword, hashedPassword string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(plainPassword)) == nil
 }
 
-
+// Error response
 func ErrorWithJson(w http.ResponseWriter, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-
-	response := map[string]interface{}{
-		"error": message,
-		"code":  code,
-	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"error": message, "code": code})
 }
 
+// Sign Up
 func (s *Server) SignUpHandle(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
-	}
-
 	var info Registration
 	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
-		http.Error(w, "Error in signup request", http.StatusUnprocessableEntity)
+		ErrorWithJson(w, http.StatusUnprocessableEntity, "Invalid request payload")
 		return
 	}
+
+	hashedPassword, err := HashPassword(info.Contrasena)
+	if err != nil {
+		ErrorWithJson(w, http.StatusInternalServerError, "Failed to hash password")
+		return
+	}
+	info.Contrasena = hashedPassword
 
 	query := `INSERT INTO usuarios (nombre, apellido, correo, contrasena, documento, direccion, ciudad, estado, telefono)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
-	hp, err := HashPassword(info.Contrasena)
-	if err != nil {
-		ErrorWithJson(w,  http.StatusInternalServerError, "failed to hash password")
-		return
-	}
-	info.Contrasena = hp
-
-	_, err = s.DB.Exec(context.Background(), query,
-		info.Nombre, info.Apellido, info.Correo, info.Contrasena,
+	_, err = s.DB.Exec(context.Background(), query, info.Nombre, info.Apellido, info.Correo, info.Contrasena,
 		info.Documento, info.Direccion, info.Ciudad, info.Estado, info.Telefono)
 
 	if err != nil {
-		http.Error(w, "Failed to insert data into database", http.StatusInternalServerError)
+		log.Println("Database Insert Error:", err) // ✅ Print the exact error in logs
+		ErrorWithJson(w, http.StatusInternalServerError, "Database error")
 		return
 	}
 
@@ -195,67 +181,61 @@ func (s *Server) SignUpHandle(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "User %s %s registered successfully!", info.Nombre, info.Apellido)
 }
 
+// Sign In
 func (s *Server) SignInHandle(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
-	}
-
 	var info SignIn
 	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
-		http.Error(w, "Error in signup request", http.StatusUnprocessableEntity)
+		ErrorWithJson(w, http.StatusUnprocessableEntity, "Invalid request payload")
 		return
 	}
 
-	query := `SELECT user_id, contrasena FROM usuarios WHERE correo=$1 `
+	query := `SELECT user_id, contrasena FROM usuarios WHERE correo=$1`
+	var userID uuid.UUID
+	var storedPassword string
 
-	var contrasena string
-	var user_id uuid.UUID
+	err := s.DB.QueryRow(context.Background(), query, info.Correo).Scan(&userID, &storedPassword)
+	if err == pgx.ErrNoRows {
+		ErrorWithJson(w, http.StatusUnauthorized, "User not found")
+		return
+	} else if err != nil {
+		ErrorWithJson(w, http.StatusInternalServerError, "Database error")
+		return
+	}
 
-	err := s.DB.QueryRow(context.Background(), query, info.Correo).Scan(&user_id, &contrasena)
+	if !ComparePassword(info.Contrasena, storedPassword) {
+		ErrorWithJson(w, http.StatusUnauthorized, "Incorrect password")
+		return
+	}
+
+	token, err := GenerateHMac(userID, ACCESS, time.Now().Add(4*time.Hour))
 	if err != nil {
-		ErrorWithJson(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if !ComparePassword(contrasena, info.Contrasena) {
-		ErrorWithJson(w, http.StatusUnauthorized, "Passwords dont match")
-		return
-	}
-
-	at, err := GenerateHMac(user_id, ACCESS, time.Now().Add(4 * time.Hour))
-	if err != nil {
-		ErrorWithJson(w, http.StatusInternalServerError, "faile to genberate access token")
+		ErrorWithJson(w, http.StatusInternalServerError, "Token generation error")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]string{"access_token":at}); err != nil {
-		ErrorWithJson(w, http.StatusInternalServerError, "faile to encode jwt token")
-		return
-	}
+	json.NewEncoder(w).Encode(map[string]string{"access_token": token})
 }
 
-
-func (s *Server) UserInfoHandler(w http.ResponseWriter, r *http.Request){
-	w.Write([]byte("nigger"))
-}
-
+// Main function
 func main() {
 	pool, err := pgxpool.Connect(context.Background(), uri)
 	if err != nil {
 		log.Fatalf("Could not connect to database: %v", err)
 	}
+	log.Println("Connected to database successfully!") // ✅ Add this log
 	defer pool.Close()
 
 	mux := http.NewServeMux()
 	s := &Server{DB: pool}
+
 	mux.HandleFunc("POST /signup", s.SignUpHandle)
 	mux.HandleFunc("POST /signin", s.SignInHandle)
-	mux.HandleFunc("GET /info", s.UserInfoHandler)
+
+	handler := CorsMiddleware(mux)
 
 	log.Println("Server running on port 8080...")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }

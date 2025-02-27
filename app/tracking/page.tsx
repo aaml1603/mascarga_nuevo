@@ -1,103 +1,97 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import LoadStatus from "@/components/load-status"
+import { toast } from "@/components/ui/use-toast"
 
-// Mock data for demonstration
-const mockLoads = [
-  {
-    id: "L001",
-    description: "Envío de Electrónicos",
-    status: "En Tránsito",
-    origin: "Miami, FL",
-    destination: "Bogotá, Colombia",
-    estimatedDelivery: "2023-07-15",
-  },
-  {
-    id: "L002",
-    description: "Juego de Muebles",
-    status: "Entregado",
-    origin: "New York, NY",
-    destination: "Medellín, Colombia",
-    estimatedDelivery: "2023-07-10",
-  },
-  {
-    id: "L003",
-    description: "Repuestos de Auto",
-    status: "En Proceso",
-    origin: "Los Angeles, CA",
-    destination: "Cali, Colombia",
-    estimatedDelivery: "2023-07-20",
-  },
-]
+interface DeliveryEntry {
+  id: number
+  user_id: string
+  numero: string
+  origen: string
+  destino: string
+  fecha_estimada: string
+  estado: string
+}
 
 export default function TrackingPage() {
-  const [isSignedIn, setIsSignedIn] = useState(false)
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(true)
+  const [deliveries, setDeliveries] = useState<DeliveryEntry[]>([])
 
-  const handleSignIn = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Here you would typically validate the credentials against your backend
-    // For this example, we'll just set isSignedIn to true
-    setIsSignedIn(true)
-  }
+  useEffect(() => {
+    const fetchDeliveries = async () => {
+      const token = localStorage.getItem("access_token")
+      if (!token) {
+        router.push("/auth")
+        return
+      }
 
-  if (isSignedIn) {
-    return (
-      <div className="container mx-auto py-10">
-        <h1 className="text-3xl font-bold mb-6">Mis Envíos</h1>
-        <div className="grid gap-6">
-          {mockLoads.map((load) => (
-            <LoadStatus key={load.id} load={load} />
-          ))}
-        </div>
-      </div>
-    )
+      try {
+        const response = await fetch("http://localhost:8080/info", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        const data = await response.json()
+
+        if (response.ok) {
+          setDeliveries(data)
+        } else {
+          if (response.status === 401) {
+            // Token expired or invalid
+            localStorage.removeItem("access_token")
+            router.push("/auth")
+          } else {
+            toast({
+              title: "Error",
+              description: data.error || "Failed to fetch deliveries",
+              variant: "destructive",
+            })
+          }
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDeliveries()
+  }, [router])
+
+  if (isLoading) {
+    return <div>Loading...</div>
   }
 
   return (
     <div className="container mx-auto py-10">
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader>
-          <CardTitle>Iniciar Sesión</CardTitle>
-          <CardDescription>Ingrese sus credenciales para ver sus envíos.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSignIn} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Correo Electrónico</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="correo@ejemplo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full">
-              Iniciar Sesión
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      <h1 className="text-3xl font-bold mb-6">Mis Envíos</h1>
+      {deliveries.length === 0 ? (
+        <p>No tienes envíos activos en este momento.</p>
+      ) : (
+        <div className="grid gap-6">
+          {deliveries.map((delivery) => (
+            <Card key={delivery.id}>
+              <CardHeader>
+                <CardTitle>Envío #{delivery.numero}</CardTitle>
+                <CardDescription>Estado: {delivery.estado}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p>Origen: {delivery.origen}</p>
+                <p>Destino: {delivery.destino}</p>
+                <p>Fecha estimada de entrega: {delivery.fecha_estimada}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
