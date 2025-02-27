@@ -1,0 +1,29 @@
+.marquee-container {
+  width: 100%;
+  overflow: hidden;
+}
+
+.marquee {
+  display: flex;
+  animation: marquee 30s linear infinite;
+}
+
+.marquee-item {
+  flex: 0 0 auto;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .marquee-container:hover .marquee {
+    animation-play-state: paused;
+  }
+}
+
