@@ -11,13 +11,13 @@ export default function Header() {
           </Link>
         </div>
         <div className="flex items-center space-x-6">
-          <Link href="tel:+17867812300" className="flex items-center text-sm hover:text-amber-400">
+          <Link href="tel:+17866579151" className="flex items-center text-sm hover:text-amber-400">
             <Phone className="h-4 w-4 mr-1" />
-            <span>+1 (786) 781-2300</span>
+            <span>+1 (786) 657-9151</span>
           </Link>
-          <Link href="mailto:info@mascargaexpress.com" className="flex items-center text-sm hover:text-orange-400">
+          <Link href="mailto:mascargaexpressusa@gmail.com" className="flex items-center text-sm hover:text-orange-400">
             <Mail className="h-4 w-4 mr-1" />
-            <span>info@mascargaexpress.com</span>
+            <span>mascargaexpressusa@gmail.com</span>
           </Link>
         </div>
       </div>

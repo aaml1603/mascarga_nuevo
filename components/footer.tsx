@@ -21,21 +21,17 @@ export default function Footer() {
               Soluciones logísticas integrales para empresas y particulares. Envíos marítimos y aéreos internacionales.
             </p>
             <div className="flex space-x-4">
-              <Link href="#" className="text-gray-400 hover:text-white">
+              <Link href="" className="text-gray-400 hover:text-white">
                 <Facebook className="h-5 w-5" />
                 <span className="sr-only">Facebook</span>
               </Link>
-              <Link href="#" className="text-gray-400 hover:text-white">
+              <Link href="https://instagram.com/mascargaexpressusa" className="text-gray-400 hover:text-white">
                 <Instagram className="h-5 w-5" />
                 <span className="sr-only">Instagram</span>
               </Link>
-              <Link href="#" className="text-gray-400 hover:text-white">
+              <Link href="" className="text-gray-400 hover:text-white">
                 <Twitter className="h-5 w-5" />
                 <span className="sr-only">Twitter</span>
-              </Link>
-              <Link href="#" className="text-gray-400 hover:text-white">
-                <Youtube className="h-5 w-5" />
-                <span className="sr-only">YouTube</span>
               </Link>
             </div>
           </div>
@@ -45,18 +41,18 @@ export default function Footer() {
             <ul className="space-y-4">
               <li className="flex">
                 <MapPin className="h-5 w-5 mr-2 text-amber-500 flex-shrink-0" />
-                <span className="text-gray-400">123 Calle Principal, Miami, FL 33126, Estados Unidos</span>
+                <span className="text-gray-400">Miami, FL</span>
               </li>
               <li className="flex">
                 <Phone className="h-5 w-5 mr-2 text-amber-500 flex-shrink-0" />
-                <Link href="tel:+17867812300" className="text-gray-400 hover:text-white">
-                  +1 (786) 781-2300
+                <Link href="tel:+17866579151" className="text-gray-400 hover:text-white">
+                  +1 (786) 657-9151
                 </Link>
               </li>
               <li className="flex">
                 <Mail className="h-5 w-5 mr-2 text-amber-500 flex-shrink-0" />
-                <Link href="mailto:info@mascargaexpress.com" className="text-gray-400 hover:text-white">
-                  info@mascargaexpress.com
+                <Link href="mailto:mascargaexpressusa@gmail.com" className="text-gray-400 hover:text-white">
+                  mascargaexpressusa@gmail.com
                 </Link>
               </li>
             </ul>

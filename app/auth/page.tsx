@@ -17,8 +17,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/use-toast";
 
+
 export default function AuthPage() {
   const router = useRouter();
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const [signUpError, setSignUpError] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
 
   const [signInData, setSignInData] = useState({
@@ -41,13 +45,12 @@ export default function AuthPage() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setSignInError(null); // Reset error message
 
     try {
       const response = await fetch("http://localhost:8080/signin", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(signInData),
       });
 
@@ -55,72 +58,42 @@ export default function AuthPage() {
 
       if (response.ok) {
         localStorage.setItem("access_token", data.access_token);
+        toast({ title: "Inicio de sesión exitoso", description: "Redirigiendo..." });
         router.push("/tracking");
       } else {
-        toast({
-          title: "Error",
-          description: data.error || "Failed to sign in",
-          variant: "destructive",
-        });
+        setSignInError(data.error || "Invalid email or password");
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred",
-        variant: "destructive",
-      });
+      setSignInError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Handle Register
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
+    setSignUpError(null); // Reset error message
+  
     try {
       const response = await fetch("http://localhost:8080/signup", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(signUpData),
       });
-
+  
       const data = await response.json();
-
+  
       if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Account created successfully. Please sign in.",
-        });
-        // Reset form and switch to sign in tab
-        setSignUpData({
-          nombre: "",
-          apellido: "",
-          correo: "",
-          contrasena: "",
-          documento: "",
-          direccion: "",
-          ciudad: "",
-          estado: "",
-          telefono: "",
-        });
+        localStorage.setItem("access_token", data.access_token);
+        toast({ title: "Cuenta creada", description: "Redirigiendo..." });
+        router.push("/tracking");
       } else {
-        console.error(data)
-        toast({
-          title: "Error",
-          description: data.error || "Failed to create account",
-          variant: "destructive",
-        });
+        setSignUpError(data.error || "No se pudo crear la cuenta");
       }
     } catch (error) {
-      console.error(error);
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred",
-        variant: "destructive",
-      });
+      setSignUpError("Ocurrió un error inesperado. Inténtalo de nuevo.");
     } finally {
       setIsLoading(false);
     }
@@ -141,8 +114,9 @@ export default function AuthPage() {
                 Ingrese sus credenciales para acceder a su cuenta.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <form onSubmit={handleSignIn} className="space-y-4">
+            <CardContent className="space-y-4">
+  {signInError && <p className="text-red-500 text-sm">{signInError}</p>}
+  <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-1">
                   <Label htmlFor="signin-email">Correo</Label>
                   <Input
@@ -186,8 +160,9 @@ export default function AuthPage() {
                 Cree una nueva cuenta para acceder a nuestros servicios.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <form onSubmit={handleSignUp} className="space-y-4">
+            <CardContent className="space-y-4">
+  {signUpError && <p className="text-red-500 text-sm">{signUpError}</p>}
+  <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label htmlFor="nombre">Nombre</Label>

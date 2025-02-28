@@ -1,3 +1,4 @@
+"use client";
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -31,7 +32,12 @@ export default function Navbar() {
           </div>
         </div>
         <div className="hidden lg:flex flex-1 justify-end">
-          <Button className="bg-orange-500 hover:bg-orange-600 text-white">Cotizar Ahora</Button>
+        <Button
+  className="bg-orange-500 hover:bg-orange-600 text-white font-bold"
+  onClick={() => window.open("https://wa.me/7866579151", "_blank")}
+>
+  Contactanos por Whatsapp
+</Button>
         </div>
         <div className="lg:hidden">
           <Button className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white">
@@ -63,7 +69,12 @@ export default function Navbar() {
         </div>
         <div className="pt-4 pb-3 border-t border-gray-700">
           <div className="px-2">
-            <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white">Cotizar Ahora</Button>
+          <Button
+  className="bg-orange-500 hover:bg-orange-600 text-white font-bold"
+  onClick={() => window.open("https://wa.me/7866579151", "_blank")}
+>
+  Contactanos por Whatsapp
+</Button>
           </div>
         </div>
       </div>

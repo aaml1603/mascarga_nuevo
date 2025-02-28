@@ -16,6 +16,7 @@ interface DeliveryEntry {
 }
 
 export default function TrackingPage() {
+  
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [deliveries, setDeliveries] = useState<DeliveryEntry[]>([])
@@ -73,22 +74,22 @@ export default function TrackingPage() {
   return (
     <div className="container mx-auto py-10">
       <h1 className="text-3xl font-bold mb-6">Mis Envíos</h1>
-      {deliveries.length === 0 ? (
+      {Array.isArray(deliveries) && deliveries.length === 0 || deliveries === null  ? (
         <p>No tienes envíos activos en este momento.</p>
       ) : (
-        <div className="grid gap-6">
-          {deliveries.map((delivery) => (
-            <Card key={delivery.id}>
-              <CardHeader>
-                <CardTitle>Envío #{delivery.numero}</CardTitle>
-                <CardDescription>Estado: {delivery.estado}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p>Origen: {delivery.origen}</p>
-                <p>Destino: {delivery.destino}</p>
-                <p>Fecha estimada de entrega: {delivery.fecha_estimada}</p>
-              </CardContent>
-            </Card>
+            <div className="grid gap-6">
+        {deliveries?.map((delivery) => (
+          <Card key={delivery.id}>
+            <CardHeader>
+              <CardTitle>Envío #{delivery.numero}</CardTitle>
+              <CardDescription>Estado: {delivery.estado}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p>Origen: {delivery.origen}</p>
+              <p>Destino: {delivery.destino}</p>
+              <p>Fecha estimada de entrega: {delivery.fecha_estimada}</p>
+            </CardContent>
+          </Card>
           ))}
         </div>
       )}

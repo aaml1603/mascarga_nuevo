@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/crypto/bcrypt"
@@ -48,7 +49,7 @@ type Entrega struct {
 	Numero        string    `json:"numero"`
 	Origen        string    `json:"origen"`
 	Destino       string    `json:"destino"`
-	FechaEstimada time.Time `json:"fecha_estimada"`
+	FechaEstimada string    `json:"fecha_estimada"`
 	Estado        string    `json:"estado"`
 }
 
@@ -154,17 +155,21 @@ func ErrorWithJson(w http.ResponseWriter, code int, message string) {
 func (s *Server) SignUpHandle(w http.ResponseWriter, r *http.Request) {
 	var info Registration
 	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
+		log.Println("❌ JSON Decode Error:", err)
 		ErrorWithJson(w, http.StatusUnprocessableEntity, "Invalid request payload")
 		return
 	}
 
+	// Hash password
 	hashedPassword, err := HashPassword(info.Contrasena)
 	if err != nil {
+		log.Println("❌ Password Hashing Error:", err)
 		ErrorWithJson(w, http.StatusInternalServerError, "Failed to hash password")
 		return
 	}
 	info.Contrasena = hashedPassword
 
+	// Insert into database
 	query := `INSERT INTO usuarios (nombre, apellido, correo, contrasena, documento, direccion, ciudad, estado, telefono)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
@@ -172,13 +177,21 @@ func (s *Server) SignUpHandle(w http.ResponseWriter, r *http.Request) {
 		info.Documento, info.Direccion, info.Ciudad, info.Estado, info.Telefono)
 
 	if err != nil {
-		log.Println("Database Insert Error:", err) // ✅ Print the exact error in logs
+		if pgErr, ok := err.(*pgconn.PgError); ok {
+			log.Println("❌ Database Error:", pgErr.Message, "| Code:", pgErr.Code) // ✅ Log database errors
+			if pgErr.Code == "23505" {                                             // Unique violation
+				ErrorWithJson(w, http.StatusConflict, "Email already in use")
+				return
+			}
+		}
+		log.Println("❌ Other Database Insert Error:", err) // ✅ Catch all errors
 		ErrorWithJson(w, http.StatusInternalServerError, "Database error")
 		return
 	}
 
+	log.Println("✅ User registered successfully:", info.Correo) // ✅ Success log
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, "User %s %s registered successfully!", info.Nombre, info.Apellido)
+	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully!"})
 }
 
 // Sign In
@@ -195,7 +208,7 @@ func (s *Server) SignInHandle(w http.ResponseWriter, r *http.Request) {
 
 	err := s.DB.QueryRow(context.Background(), query, info.Correo).Scan(&userID, &storedPassword)
 	if err == pgx.ErrNoRows {
-		ErrorWithJson(w, http.StatusUnauthorized, "User not found")
+		ErrorWithJson(w, http.StatusUnauthorized, "Invalid email or password")
 		return
 	} else if err != nil {
 		ErrorWithJson(w, http.StatusInternalServerError, "Database error")
@@ -203,7 +216,7 @@ func (s *Server) SignInHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !ComparePassword(info.Contrasena, storedPassword) {
-		ErrorWithJson(w, http.StatusUnauthorized, "Incorrect password")
+		ErrorWithJson(w, http.StatusUnauthorized, "Invalid email or password")
 		return
 	}
 
@@ -215,6 +228,114 @@ func (s *Server) SignInHandle(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"access_token": token})
+}
+
+func (s *Server) AddDeliveryHandle(w http.ResponseWriter, r *http.Request) {
+	var entrega Entrega
+	if err := json.NewDecoder(r.Body).Decode(&entrega); err != nil {
+		log.Println("❌ JSON Decode Error:", err)
+		ErrorWithJson(w, http.StatusUnprocessableEntity, "Invalid request payload")
+		return
+	}
+
+	// Validate UUID format
+	if entrega.UserID == uuid.Nil {
+		ErrorWithJson(w, http.StatusBadRequest, "Invalid user ID")
+		return
+	}
+
+	// Insert delivery into database (Ensure `fecha_estimada` is stored as `DATE`)
+	query := `INSERT INTO entregas (user_id, numero, origen, destino, fecha_estimada, estado)
+              VALUES ($1, $2, $3, $4, $5::DATE, $6) RETURNING id`
+
+	err := s.DB.QueryRow(context.Background(), query, entrega.UserID, entrega.Numero, entrega.Origen, entrega.Destino, entrega.FechaEstimada, entrega.Estado).Scan(&entrega.ID)
+
+	if err != nil {
+		log.Println("❌ Database Insert Error:", err)
+		ErrorWithJson(w, http.StatusInternalServerError, "Failed to add delivery")
+		return
+	}
+
+	log.Println("✅ Delivery added successfully for user:", entrega.UserID)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":     "Delivery added successfully!",
+		"delivery_id": entrega.ID,
+	})
+}
+
+func (s *Server) GetUserDeliveries(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		ErrorWithJson(w, http.StatusUnauthorized, "Missing token")
+		return
+	}
+
+	tokenString := authHeader[len("Bearer "):]
+	userID, _, err := ValidateHmac(tokenString)
+	if err != nil {
+		ErrorWithJson(w, http.StatusUnauthorized, "Invalid or expired token")
+		return
+	}
+
+	// Query database and format `fecha_estimada` correctly
+	query := `SELECT id, user_id, numero, origen, destino, 
+			TO_CHAR(fecha_estimada, 'YYYY-MM-DD') AS fecha_estimada, estado 
+			FROM entregas WHERE user_id = $1`
+
+	rows, err := s.DB.Query(context.Background(), query, userID)
+	if err != nil {
+		log.Println("❌ Database Query Error:", err)
+		ErrorWithJson(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+	defer rows.Close()
+
+	var deliveries []Entrega
+	for rows.Next() {
+		var entrega Entrega
+		err := rows.Scan(&entrega.ID, &entrega.UserID, &entrega.Numero, &entrega.Origen, &entrega.Destino, &entrega.FechaEstimada, &entrega.Estado)
+		if err != nil {
+			log.Println("❌ Data Parsing Error:", err)
+			ErrorWithJson(w, http.StatusInternalServerError, "Data processing error")
+			return
+		}
+		deliveries = append(deliveries, entrega)
+	}
+
+	// Send JSON response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(deliveries)
+}
+
+func (s *Server) UpdateDeliveryHandle(w http.ResponseWriter, r *http.Request) {
+	var entrega Entrega
+	if err := json.NewDecoder(r.Body).Decode(&entrega); err != nil {
+		log.Println("❌ JSON Decode Error:", err)
+		ErrorWithJson(w, http.StatusUnprocessableEntity, "Invalid request payload")
+		return
+	}
+
+	// Validate ID
+	if entrega.ID == 0 {
+		ErrorWithJson(w, http.StatusBadRequest, "Missing delivery ID")
+		return
+	}
+
+	// Update the estado field in the database
+	query := `UPDATE entregas SET estado = $1 WHERE id = $2`
+
+	_, err := s.DB.Exec(context.Background(), query, entrega.Estado, entrega.ID)
+	if err != nil {
+		log.Println("❌ Database Update Error:", err)
+		ErrorWithJson(w, http.StatusInternalServerError, "Failed to update delivery status")
+		return
+	}
+
+	log.Println("✅ Delivery updated successfully:", entrega.ID)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Delivery updated successfully!"})
 }
 
 // Main function
@@ -231,6 +352,9 @@ func main() {
 
 	mux.HandleFunc("POST /signup", s.SignUpHandle)
 	mux.HandleFunc("POST /signin", s.SignInHandle)
+	mux.HandleFunc("POST /add_delivery", s.AddDeliveryHandle)
+	mux.HandleFunc("GET /info", s.GetUserDeliveries)
+	mux.HandleFunc("PUT /update_delivery", s.UpdateDeliveryHandle)
 
 	handler := CorsMiddleware(mux)
 

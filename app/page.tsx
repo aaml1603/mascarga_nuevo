@@ -1,3 +1,5 @@
+"use client";
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Package, Search, Clock, DollarSign, Globe, Lock, Package2, Plane, Ship, Truck, Users } from "lucide-react"
@@ -56,7 +58,12 @@ export default function Home() {
             <p className="max-w-[700px] text-white text-xl font-semibold drop-shadow-md mb-6">
               Envíos aéreos y marítimos desde USA con la mejor relación calidad-precio
             </p>
-            <Button className="bg-orange-500 hover:bg-orange-600 text-white font-bold">Cotizar Ahora</Button>
+            <Button
+  className="bg-orange-500 hover:bg-orange-600 text-white font-bold"
+  onClick={() => window.open("https://wa.me/7866579151", "_blank")}
+>
+  Contactanos por Whatsapp
+</Button>
           </div>
         </div>
       </section>
@@ -70,7 +77,7 @@ export default function Home() {
                 <Package className="h-12 w-12 text-white" />
                 <h3 className="text-2xl font-bold text-white uppercase">Crea tu Casillero Gratis</h3>
                 <p className="text-white/90">Recibe tus compras internacionales con tu dirección personal</p>
-                <Button className="bg-navy-700 text-white hover:bg-navy-800 mt-4" asChild>
+                <Button className="bg-gray-900 text-white hover:bg-navy-800 mt-4" asChild>
                   <Link href="/auth">CLICK AQUÍ</Link>
                 </Button>
               </CardContent>
@@ -81,7 +88,7 @@ export default function Home() {
                 <Search className="h-12 w-12 text-white" />
                 <h3 className="text-2xl font-bold text-white uppercase">Rastrea tus Envíos</h3>
                 <p className="text-white/90">Seguimiento en tiempo real de todos tus paquetes</p>
-                <Button className="bg-navy-700 text-white hover:bg-navy-800 mt-4" asChild>
+                <Button className="bg-gray-900 text-white hover:bg-navy-800 mt-4" asChild>
                   <Link href="/tracking">CLICK AQUÍ</Link>
                 </Button>
               </CardContent>
@@ -247,7 +254,6 @@ export default function Home() {
                       </div>
                       <p className="text-gray-500 dark:text-gray-400 mb-4">"{testimonial.content}"</p>
                       <div className="flex items-center space-x-4">
-                        <div className="rounded-full bg-gray-200 dark:bg-gray-700 w-10 h-10" />
                         <div>
                           <p className="font-medium text-gray-900 dark:text-white">{testimonial.name}</p>
                           <p className="text-sm text-gray-500 dark:text-gray-400">{testimonial.since}</p>
@@ -273,9 +279,6 @@ export default function Home() {
               </p>
             </div>
             <div className="w-full max-w-sm space-y-2">
-              <Button className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold">
-                Solicitar Cotización
-              </Button>
             </div>
           </div>
         </div>
